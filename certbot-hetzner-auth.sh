@@ -1,17 +1,19 @@
 #!/bin/bash
 
-token=$(cat /etc/hetzner-dns-token)
+token=${HETZNER_API_TOKEN:-$(cat /etc/hetzner-dns-token)}
 search_name=$( echo $CERTBOT_DOMAIN | rev | cut -d'.' -f 1,2 | rev)
+sub_name=$( echo $CERTBOT_DOMAIN | rev | cut -d'.' -f 3- | rev)
 
-zone_id=$(curl \
-        -H "Auth-API-Token: ${token}" \
-        "https://dns.hetzner.com/api/v1/zones?search_name=${search_name}" | \
-        jq ".\"zones\"[] | select(.name == \"${search_name}\") | .id" 2>/dev/null | tr -d '"')
+if ! test -z ${sub_name}
+then
+	sub_name=.${sub_name}
+fi
 
-curl -X "POST" "https://dns.hetzner.com/api/v1/records" \
-     -H 'Content-Type: application/json' \
-     -H "Auth-API-Token: ${token}" \
-     -d "{ \"value\": \"${CERTBOT_VALIDATION}\", \"ttl\": 300, \"type\": \"TXT\", \"name\": \"_acme-challenge.${CERTBOT_DOMAIN}.\", \"zone_id\": \"${zone_id}\" }" > /dev/null 2>/dev/null
+curl	-so/dev/null \
+	-H "Authorization: Bearer ${token}" \
+	-H 'Content-Type: application/json' \
+	-X "POST" "https://api.hetzner.cloud/v1/zones/${search_name}/rrsets" \
+	-d '{"name":"_acme-challenge'${sub_name}'","type":"TXT","ttl":60,"records":[{"value":"\"'${CERTBOT_VALIDATION}'\""}]}'
 
 # just make sure we sleep for a while (this should be a dig poll loop)
 sleep 30
